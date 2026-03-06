@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hardware Dataset Clusters</title>
+    <!-- Modern Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- D3.js -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Sidebar layout -->
+        <aside id="sidebar">
+            <header>
+                <h1>Dataset Clusters</h1>
+                <p>Interactive Visualization of Dirty Hardware Data</p>
+                <div id="stats-container">
+                    <!-- Populated by JS -->
+                </div>
+            </header>
+            
+            <div id="legend">
+                <h3>Hardware Categories</h3>
+                <ul id="legend-list">
+                    <!-- Populated by JS -->
+                </ul>
+            </div>
+            
+            <div id="controls">
+                <h3>Controls</h3>
+                <div class="control-group">
+                    <label for="search">Search Clusters</label>
+                    <input type="text" id="search" placeholder="E.g. Router, iPhone, 4331...">
+                </div>
+                <div class="control-group">
+                    <label for="size-filter">Min Cluster Size: <span id="size-val">1</span></label>
+                    <input type="range" id="size-filter" min="1" max="100" value="1">
+                </div>
+                <button id="reset-zoom" class="btn">Reset View</button>
+            </div>
+        </aside>
+
+        <!-- Main Graph Area -->
+        <main id="graph-container">
+            <svg id="viz"></svg>
+            <div class="tooltip" id="node-tooltip"></div>
+        </main>
+        
+        <!-- Detail Panel (Slides in from right) -->
+        <div id="detail-panel" class="hidden">
+            <button id="close-detail" class="icon-btn">&times;</button>
+            <div id="detail-content">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Logic -->
+    <script src="app.js"></script>
+</body>
+</html>
