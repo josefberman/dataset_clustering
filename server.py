@@ -2,11 +2,12 @@ import json
 from collections import Counter
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 from contextlib import asynccontextmanager
+import io
 
 from cluster_hardware import load_data, build_text_representations, generate_embeddings, cluster_embeddings
 from prepare_viz_data import CATEGORY_KEYWORDS
@@ -34,7 +35,7 @@ def infer_category(records):
 async def lifespan(app: FastAPI):
     print("🚀 Starting up server and generating initial embeddings...")
     # 1. Load data
-    df = load_data("dirty_hardware_data.csv")
+    df = load_data("dirty_hardware_data_40k.csv")
     
     # We strip out the generated cluster id if it already existed in the dataset
     if "cluster_id" in df.columns:
@@ -109,7 +110,47 @@ def get_clusters(threshold: float = 0.3):
         "clusters": clusters,
     }
     
+    
     return viz_data
+
+@app.post("/api/upload")
+async def upload_dataset(file: UploadFile = File(...), threshold: float = Form(0.5)):
+    print(f"📥 Received file upload: {file.filename}")
+    
+    try:
+        content = await file.read()
+        
+        # Determine file type and load into pandas
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(content), dtype=str).fillna("")
+        elif file.filename.endswith(('.xls', '.xlsx')):
+            df = pd.read_excel(io.BytesIO(content), dtype=str).fillna("")
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file format. Please upload a .csv or .xlsx file.")
+            
+        if len(df) == 0:
+            raise HTTPException(status_code=400, detail="The uploaded file contains no data rows.")
+            
+        print(f"   Loaded {len(df):,} rows from uploaded file.")
+        
+        # We strip out the generated cluster id if it already existed in the dataset
+        if "cluster_id" in df.columns:
+             df = df.drop(columns=["cluster_id"])
+             
+        app_state["columns"] = df.columns.tolist()
+        app_state["df"] = df
+        
+        # Generate new embeddings
+        texts = build_text_representations(df)
+        app_state["embeddings"] = generate_embeddings(texts, "all-MiniLM-L6-v2", 512)
+        
+        # Trigger reclustering using the global method we already have
+        return get_clusters(threshold)
+        
+    except Exception as e:
+        print(f"❌ Error processing upload: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # Mount the visualization frontend
 app.mount("/", StaticFiles(directory="cluster_viz", html=True), name="static")

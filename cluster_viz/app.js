@@ -105,6 +105,8 @@ function setupUI() {
     const thresholdInput = document.getElementById("threshold-filter");
     const thresholdValDisplay = document.getElementById("threshold-val");
     const reclusterBtn = document.getElementById("recluster-btn");
+    const uploadBtn = document.getElementById("upload-btn");
+    const fileInput = document.getElementById("file-upload");
 
     thresholdInput.addEventListener("input", (e) => {
         const val = parseFloat(e.target.value).toFixed(2);
@@ -114,6 +116,64 @@ function setupUI() {
 
     reclusterBtn.addEventListener("click", () => {
         fetchAndRenderData();
+    });
+
+    // Custom Dataset Upload
+    uploadBtn.addEventListener("click", () => {
+        fileInput.click();
+    });
+
+    fileInput.addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // Reset the input so the same file can be uploaded again if needed
+        e.target.value = "";
+
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("threshold", currentThreshold);
+
+        // Show a custom loading indicator since embedding takes longer
+        document.getElementById("graph-container").classList.add("loading");
+
+        // Temporarily change the loading text
+        const style = document.createElement('style');
+        style.innerHTML = `#graph-container.loading::after { content: "Processing File & Generating Embeddings..."; }`;
+        document.head.appendChild(style);
+
+        document.getElementById("viz").style.opacity = "0.5";
+
+        try {
+            const response = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || "Upload failed");
+            }
+
+            globalData = await response.json();
+
+            // Clear existing graph
+            if (svg) {
+                d3.select("#viz").selectAll("*").remove();
+                clearSearch();
+                document.getElementById("detail-panel").classList.remove("visible");
+            }
+
+            updateStatsAndLegend();
+            drawGraph();
+        } catch (err) {
+            console.error("Failed to upload dataset.", err);
+            alert("Error: " + err.message);
+        } finally {
+            document.getElementById("graph-container").classList.remove("loading");
+            document.getElementById("viz").style.opacity = "1";
+            document.head.removeChild(style); // Remove custom loading text
+        }
     });
 
     document.getElementById("reset-zoom").addEventListener("click", () => {
