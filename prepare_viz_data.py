@@ -10,6 +10,20 @@ import pandas as pd
 from collections import Counter
 
 
+# Known hardware categories for color mapping
+CATEGORY_KEYWORDS = {
+    "Router": ["router", "rou"],
+    "Cable": ["cable", "cab", "braided"],
+    "Webcam": ["webcam", "web"],
+    "Mobile Phone": ["mobile", "phone", "mob", "iphone", "pixel", "samsung", "oneplus"],
+    "SIM Card": ["sim", "esim"],
+    "Keyboard": ["keyboard", "key", "logitech mx keys", "keychron", "blackwidow", "corsair"],
+    "Mouse": ["mouse", "deathadder", "rival", "magic mouse"],
+    "Headphones": ["headphone", "head", "sony", "bose", "sennheiser", "airpods"],
+    "Monitor": ["monitor", "mon", "ultrasharp", "ultragear", "rog swift", "odyssey"],
+    "Laptop": ["laptop", "lap", "macbook", "dell xps", "thinkpad", "razer blade"]
+}
+
 def main():
     input_file = sys.argv[1] if len(sys.argv) > 1 else "clustered_output.csv"
     output_file = sys.argv[2] if len(sys.argv) > 2 else "cluster_viz/data.json"
@@ -20,14 +34,7 @@ def main():
     columns = [c for c in df.columns if c != "cluster_id"]
     df["cluster_id"] = df["cluster_id"].astype(int)
 
-    # Known hardware categories for color mapping
-    CATEGORY_KEYWORDS = {
-        "Router": ["router", "rou"],
-        "Cable": ["cable", "cab", "braided"],
-        "Webcam": ["webcam", "web"],
-        "Mobile Phone": ["mobile", "phone", "mob", "iphone", "pixel", "samsung"],
-        "SIM Card": ["sim", "esim"],
-    }
+    df["cluster_id"] = df["cluster_id"].astype(int)
 
     def infer_category(records):
         """Infer the dominant hardware category from a cluster's records."""

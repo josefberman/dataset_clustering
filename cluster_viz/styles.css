@@ -7,13 +7,19 @@
     --text-secondary: #94a3b8;
     --accent: #3b82f6;
     --accent-hover: #2563eb;
-    
-    --color-router: #ef4444; /* red */
-    --color-cable: #eab308; /* yellow */
-    --color-webcam: #a855f7; /* purple */
-    --color-mobile: #3b82f6; /* blue */
-    --color-sim: #10b981; /* emerald */
-    --color-other: #64748b; /* slate */
+
+    --color-router: #ef4444;
+    /* red */
+    --color-cable: #eab308;
+    /* yellow */
+    --color-webcam: #a855f7;
+    /* purple */
+    --color-mobile: #3b82f6;
+    /* blue */
+    --color-sim: #10b981;
+    /* emerald */
+    --color-other: #64748b;
+    /* slate */
 }
 
 * {
@@ -26,7 +32,8 @@ body {
     font-family: 'Inter', -apple-system, sans-serif;
     background-color: var(--bg-color);
     color: var(--text-primary);
-    overflow: hidden; /* D3 will handle zooming/panning */
+    overflow: hidden;
+    /* D3 will handle zooming/panning */
     display: flex;
     height: 100vh;
 }
@@ -38,6 +45,23 @@ body {
     position: relative;
 }
 
+#graph-container.loading::after {
+    content: "Reclustering (Calculating Distances)...";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 1.5rem;
+    font-weight: 600;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 20px 40px;
+    border-radius: 8px;
+    z-index: 100;
+    backdrop-filter: blur(4px);
+    pointer-events: none;
+}
+
 /* Sidebar */
 #sidebar {
     width: 320px;
@@ -47,7 +71,7 @@ body {
     display: flex;
     flex-direction: column;
     z-index: 10;
-    box-shadow: 4px 0 15px rgba(0,0,0,0.2);
+    box-shadow: 4px 0 15px rgba(0, 0, 0, 0.2);
 }
 
 header {
@@ -74,7 +98,7 @@ header p {
 }
 
 .stat-box {
-    background: rgba(0,0,0,0.2);
+    background: rgba(0, 0, 0, 0.2);
     padding: 10px;
     border-radius: 8px;
     text-align: center;
@@ -98,7 +122,8 @@ header p {
     border-bottom: 1px solid var(--border);
 }
 
-#legend h3, #controls h3 {
+#legend h3,
+#controls h3 {
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -141,7 +166,7 @@ header p {
 input[type="text"] {
     width: 100%;
     padding: 10px 12px;
-    background: rgba(0,0,0,0.2);
+    background: rgba(0, 0, 0, 0.2);
     border: 1px solid var(--border);
     border-radius: 6px;
     color: white;
@@ -223,7 +248,7 @@ input[type="range"] {
     padding: 12px;
     border-radius: 6px;
     pointer-events: none;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
     opacity: 0;
     transition: opacity 0.2s;
     z-index: 20;
@@ -262,7 +287,7 @@ input[type="range"] {
     background: rgba(15, 23, 42, 0.95);
     border-left: 1px solid var(--border);
     backdrop-filter: blur(12px);
-    box-shadow: -4px 0 25px rgba(0,0,0,0.4);
+    box-shadow: -4px 0 25px rgba(0, 0, 0, 0.4);
     z-index: 30;
     transform: translateX(100%);
     transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -329,8 +354,8 @@ input[type="range"] {
 }
 
 .record-item {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     padding: 12px;
     border-radius: 6px;
     font-family: monospace;

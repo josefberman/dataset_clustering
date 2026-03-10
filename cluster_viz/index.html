@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,13 +9,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
+
     <!-- D3.js -->
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    
+
     <!-- Custom Styles -->
     <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
     <div id="app">
         <!-- Sidebar layout -->
@@ -26,19 +28,26 @@
                     <!-- Populated by JS -->
                 </div>
             </header>
-            
+
             <div id="legend">
                 <h3>Hardware Categories</h3>
                 <ul id="legend-list">
                     <!-- Populated by JS -->
                 </ul>
             </div>
-            
+
             <div id="controls">
                 <h3>Controls</h3>
                 <div class="control-group">
                     <label for="search">Search Clusters</label>
                     <input type="text" id="search" placeholder="E.g. Router, iPhone, 4331...">
+                </div>
+                <div class="control-group">
+                    <label for="threshold-filter">Clustering Threshold: <span id="threshold-val"
+                            style="font-weight:bold; color:var(--text-color);">0.50</span></label>
+                    <input type="range" id="threshold-filter" min="0.10" max="0.90" step="0.05" value="0.50">
+                    <button id="recluster-btn" class="btn" style="margin-top: 10px; width: 100%;">Recalculate
+                        Clusters</button>
                 </div>
                 <div class="control-group">
                     <label for="size-filter">Min Cluster Size: <span id="size-val">1</span></label>
@@ -53,7 +62,7 @@
             <svg id="viz"></svg>
             <div class="tooltip" id="node-tooltip"></div>
         </main>
-        
+
         <!-- Detail Panel (Slides in from right) -->
         <div id="detail-panel" class="hidden">
             <button id="close-detail" class="icon-btn">&times;</button>
@@ -66,4 +75,5 @@
     <!-- Custom Logic -->
     <script src="app.js"></script>
 </body>
+
 </html>

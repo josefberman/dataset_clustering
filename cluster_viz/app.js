@@ -5,6 +5,11 @@ const colorMap = {
     "Webcam": "#a855f7",
     "Mobile Phone": "#3b82f6",
     "SIM Card": "#10b981",
+    "Keyboard": "#f43f5e",
+    "Mouse": "#14b8a6",
+    "Headphones": "#8b5cf6",
+    "Monitor": "#0ea5e9",
+    "Laptops": "#f97316",
     "Other": "#64748b"
 };
 
@@ -16,25 +21,46 @@ let zoom = null;
 let nodeSelection = null;
 
 // Initialization
+let currentThreshold = 0.50;
+
 async function init() {
+    await fetchAndRenderData();
+    setupUI();
+}
+
+async function fetchAndRenderData() {
+    // Show loading indicator
+    document.getElementById("graph-container").classList.add("loading");
+    document.getElementById("viz").style.opacity = "0.5";
+
     try {
-        const response = await fetch('data.json');
+        const response = await fetch(`/api/clusters?threshold=${currentThreshold}`);
         globalData = await response.json();
 
-        setupUI();
+        // Clear existing graph elements if any
+        if (svg) {
+            d3.select("#viz").selectAll("*").remove();
+            clearSearch();
+            document.getElementById("detail-panel").classList.remove("visible");
+        }
+
+        updateStatsAndLegend();
         drawGraph();
     } catch (err) {
-        console.error("Failed to load data.json. Are you running a local web server?", err);
+        console.error("Failed to fetch clustering data from API.", err);
         document.getElementById("graph-container").innerHTML = `
             <div style="padding: 40px; text-align: center; color: #ef4444;">
                 <h2>Error loading data</h2>
                 <p>Run <code>python3 -m http.server</code> in the cluster_viz directory and visit localhost:8000</p>
             </div>
         `;
+    } finally {
+        document.getElementById("graph-container").classList.remove("loading");
+        document.getElementById("viz").style.opacity = "1";
     }
 }
 
-function setupUI() {
+function updateStatsAndLegend() {
     // Stats
     const statsHtml = `
         <div class="stat-box">
@@ -58,7 +84,9 @@ function setupUI() {
             </li>
         `).join("");
     document.getElementById("legend-list").innerHTML = legendHtml;
+}
 
+function setupUI() {
     // Controls
     document.getElementById("search").addEventListener("input", handleSearch);
 
@@ -73,9 +101,30 @@ function setupUI() {
         filterNodesBySize(parseInt(val));
     });
 
+    // Threshold Filter
+    const thresholdInput = document.getElementById("threshold-filter");
+    const thresholdValDisplay = document.getElementById("threshold-val");
+    const reclusterBtn = document.getElementById("recluster-btn");
+
+    thresholdInput.addEventListener("input", (e) => {
+        const val = parseFloat(e.target.value).toFixed(2);
+        thresholdValDisplay.textContent = val;
+        currentThreshold = val;
+    });
+
+    reclusterBtn.addEventListener("click", () => {
+        fetchAndRenderData();
+    });
+
     document.getElementById("reset-zoom").addEventListener("click", () => {
         svg.transition().duration(750).call(zoom.transform, d3.zoomIdentity);
         clearSearch();
+
+        // Reset min cluster size
+        const sizeInput = document.getElementById("size-filter");
+        sizeInput.value = 1;
+        document.getElementById("size-val").textContent = "1";
+        filterNodesBySize(1);
     });
 
     document.getElementById("close-detail").addEventListener("click", closeDetailPanel);
@@ -136,14 +185,17 @@ function drawGraph() {
 
             const sample = d.sample_records[0].join(" | ");
 
+            // Calculate coordinates relative to the graph container to account for the sidebar
+            const [x, y] = d3.pointer(event, document.getElementById("graph-container"));
+
             tooltip.html(`
                 <div class="tooltip-title">Cluster ${d.id}</div>
                 <div class="tooltip-stat">Category: <b>${d.category}</b></div>
                 <div class="tooltip-stat">Records: <b>${d.size.toLocaleString()}</b></div>
                 <div class="tooltip-sample">${sample}</div>
             `)
-                .style("left", (event.pageX + 15) + "px")
-                .style("top", (event.pageY - 28) + "px");
+                .style("left", (x + 15) + "px")
+                .style("top", (y + 15) + "px");
         })
         .on("mouseout", function () {
             if (!this.classList.contains("highlighted")) {
