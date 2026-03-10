@@ -4,7 +4,7 @@ import re
 
 # Configuration
 NUM_RECORDS = 100000
-OUTPUT_FILE = "dirty_hardware_data.csv"
+OUTPUT_FILE = "dirty_hardware_data_40k.csv"
 
 # Base Data Templates
 hardware_templates = {

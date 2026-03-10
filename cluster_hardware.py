@@ -7,8 +7,8 @@ For large datasets (>10K rows), uses a two-phase approach:
   Phase 2: Run agglomerative clustering within each chunk, then merge labels
 
 Usage:
-    python cluster_hardware.py --input dirty_hardware_data.csv --threshold 0.3
-    python cluster_hardware.py --input dirty_hardware_data.csv --threshold 0.2 --sample-size 5000
+    python cluster_hardware.py --input dirty_hardware_data_40k.csv --threshold 0.3
+    python cluster_hardware.py --input dirty_hardware_data_40k.csv --threshold 0.2 --sample-size 5000
 """
 
 import argparse
@@ -30,8 +30,8 @@ def parse_args():
         description="Cluster dirty hardware CSV records using embeddings + agglomerative clustering."
     )
     parser.add_argument(
-        "--input", default="dirty_hardware_data.csv",
-        help="Path to the input CSV file (default: dirty_hardware_data.csv)"
+        "--input", default="dirty_hardware_data_40k.csv",
+        help="Path to the input CSV file (default: dirty_hardware_data_40k.csv)"
     )
     parser.add_argument(
         "--output", default="clustered_output.csv",
