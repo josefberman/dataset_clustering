@@ -1,17 +1,20 @@
-// Color mapping matching the CSS variables
-const colorMap = {
-    "Router": "#ef4444",
-    "Cable": "#eab308",
-    "Webcam": "#a855f7",
-    "Mobile Phone": "#3b82f6",
+// Color generator for dynamic categories
+const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+// specific overrides for visually important categories
+const specificColors = {
+    "Other": "#64748b",
     "SIM Card": "#10b981",
-    "Keyboard": "#f43f5e",
-    "Mouse": "#14b8a6",
-    "Headphones": "#8b5cf6",
-    "Monitor": "#0ea5e9",
-    "Laptops": "#f97316",
-    "Other": "#64748b"
+    "Cable": "#eab308",
+    "Storage": "#f43f5e",
+    "Adapter": "#a855f7",
+    "PC Component": "#3b82f6",
+    "Telecom": "#0284c7"
 };
+
+function getColor(category) {
+    if (specificColors[category]) return specificColors[category];
+    return colorScale(category);
+}
 
 let globalData = null;
 let simulation = null;
@@ -51,7 +54,7 @@ async function fetchAndRenderData() {
         document.getElementById("graph-container").innerHTML = `
             <div style="padding: 40px; text-align: center; color: #ef4444;">
                 <h2>Error loading data</h2>
-                <p>Run <code>python3 -m http.server</code> in the cluster_viz directory and visit localhost:8000</p>
+                <p>Make sure the backend server is running: <code>uvicorn server:app --port 8001</code> and visit <a href="http://localhost:8001" style="color:#3b82f6;">localhost:8001</a></p>
             </div>
         `;
     } finally {
@@ -79,7 +82,7 @@ function updateStatsAndLegend() {
         .sort((a, b) => b[1] - a[1]) // Sort by count desc
         .map(([cat, count]) => `
             <li class="legend-item">
-                <div class="legend-color" style="background-color: ${colorMap[cat]}; color: ${colorMap[cat]}"></div>
+                <div class="legend-color" style="background-color: ${getColor(cat)}; color: ${getColor(cat)}"></div>
                 <span>${cat} <span style="color:var(--text-secondary); font-size:0.8em">(${count})</span></span>
             </li>
         `).join("");
@@ -233,10 +236,9 @@ function drawGraph() {
     nodeSelection = g.append("g")
         .selectAll("circle")
         .data(nodes)
-        .join("circle")
         .attr("class", "node")
         .attr("r", d => sizeScale(d.size))
-        .attr("fill", d => colorMap[d.category] || colorMap["Other"])
+        .attr("fill", d => getColor(d.category))
         .attr("fill-opacity", 0.8)
         .on("mouseover", function (event, d) {
             d3.select(this).attr("stroke", "#fff").attr("stroke-width", 3);
@@ -252,6 +254,7 @@ function drawGraph() {
                 <div class="tooltip-title">Cluster ${d.id}</div>
                 <div class="tooltip-stat">Category: <b>${d.category}</b></div>
                 <div class="tooltip-stat">Records: <b>${d.size.toLocaleString()}</b></div>
+                ${d.matched_device ? `<div class="tooltip-stat" style="color:#10b981;">🔩 ${d.matched_device}</div>` : ''}
                 <div class="tooltip-sample">${sample}</div>
             `)
                 .style("left", (x + 15) + "px")
@@ -325,7 +328,7 @@ function showDetailPanel(cluster) {
     const detailPanel = document.getElementById("detail-panel");
     const content = document.getElementById("detail-content");
 
-    const color = colorMap[cluster.category] || colorMap["Other"];
+    const color = getColor(cluster.category);
 
     // Generate records HTML
     const recordsHtml = cluster.sample_records.map(rec => {
@@ -337,6 +340,31 @@ function showDetailPanel(cluster) {
         warningHtml = `<div style="margin-top: 16px; font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Showing ${cluster.sample_records.length} of ${cluster.size.toLocaleString()} records</div>`;
     }
 
+    const matchedDeviceHtml = cluster.matched_device ? `
+        <div style="
+            background: linear-gradient(135deg, #064e3b22, #10b98122);
+            border: 1px solid #10b98140;
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 18px;
+        ">
+            <div style="font-size: 0.72rem; color: #10b981; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;">
+                🔩 Matched iFixit Device
+            </div>
+            <div style="font-size: 1rem; font-weight: 600; color: white; margin-bottom: 4px;">
+                ${cluster.device_url
+                    ? `<a href="${cluster.device_url}" target="_blank" rel="noopener noreferrer"
+                        style="color: #34d399; text-decoration: none;"
+                        onmouseover="this.style.textDecoration='underline'"
+                        onmouseout="this.style.textDecoration='none'"
+                       >${cluster.matched_device} ↗</a>`
+                    : cluster.matched_device
+                }
+            </div>
+            ${cluster.matched_device_category ? `<div style="font-size: 0.8rem; color: #6ee7b7;">Category: ${cluster.matched_device_category}</div>` : ''}
+        </div>
+    ` : '';
+
     content.innerHTML = `
         <div class="detail-header">
             <div class="cluster-badge" style="background-color: ${color}20; color: ${color}; border: 1px solid ${color}40">
@@ -347,6 +375,8 @@ function showDetailPanel(cluster) {
                 <span><b style="color:white">${cluster.size.toLocaleString()}</b> Records</span>
             </div>
         </div>
+        
+        ${matchedDeviceHtml}
         
         <h3>Sample Records</h3>
         <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 16px;">
@@ -361,6 +391,7 @@ function showDetailPanel(cluster) {
 
     detailPanel.classList.add("visible");
 }
+
 
 function closeDetailPanel() {
     document.getElementById("detail-panel").classList.remove("visible");

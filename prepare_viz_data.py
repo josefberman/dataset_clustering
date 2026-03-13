@@ -9,20 +9,31 @@ import sys
 import pandas as pd
 from collections import Counter
 
+import os
+from custom_devices import CUSTOM_DEVICES
 
-# Known hardware categories for color mapping
-CATEGORY_KEYWORDS = {
-    "Router": ["router", "rou"],
-    "Cable": ["cable", "cab", "braided"],
-    "Webcam": ["webcam", "web"],
-    "Mobile Phone": ["mobile", "phone", "mob", "iphone", "pixel", "samsung", "oneplus"],
-    "SIM Card": ["sim", "esim"],
-    "Keyboard": ["keyboard", "key", "logitech mx keys", "keychron", "blackwidow", "corsair"],
-    "Mouse": ["mouse", "deathadder", "rival", "magic mouse"],
-    "Headphones": ["headphone", "head", "sony", "bose", "sennheiser", "airpods"],
-    "Monitor": ["monitor", "mon", "ultrasharp", "ultragear", "rog swift", "odyssey"],
-    "Laptop": ["laptop", "lap", "macbook", "dell xps", "thinkpad", "razer blade"]
-}
+def load_category_keywords():
+    """Build dynamic CATEGORY_KEYWORDS from iFixit devices + custom ones."""
+    device_list = []
+    if os.path.exists("ifixit_devices.json"):
+        with open("ifixit_devices.json", "r", encoding="utf-8") as f:
+            device_list = json.load(f)
+    device_list.extend(CUSTOM_DEVICES)
+    
+    dynamic_keywords = {}
+    for d in device_list:
+        cat = d.get("category")
+        if not cat: continue
+        if cat not in dynamic_keywords:
+            dynamic_keywords[cat] = {cat.lower()}
+        sub = d.get("subcategory")
+        if sub:
+            dynamic_keywords[cat].add(sub.lower())
+    
+    return {k: list(v) for k, v in dynamic_keywords.items()}
+
+CATEGORY_KEYWORDS = load_category_keywords()
+
 
 def main():
     input_file = sys.argv[1] if len(sys.argv) > 1 else "clustered_output.csv"
