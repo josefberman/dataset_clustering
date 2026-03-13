@@ -236,6 +236,7 @@ function drawGraph() {
     nodeSelection = g.append("g")
         .selectAll("circle")
         .data(nodes)
+        .join("circle")
         .attr("class", "node")
         .attr("r", d => sizeScale(d.size))
         .attr("fill", d => getColor(d.category))
@@ -252,7 +253,7 @@ function drawGraph() {
 
             tooltip.html(`
                 <div class="tooltip-title">Cluster ${d.id}</div>
-                <div class="tooltip-stat">Category: <b>${d.category}</b></div>
+                <div class="tooltip-stat">Category: <b>${d.category}${d.subcategory ? ` / ${d.subcategory}` : ""}</b></div>
                 <div class="tooltip-stat">Records: <b>${d.size.toLocaleString()}</b></div>
                 ${d.matched_device ? `<div class="tooltip-stat" style="color:#10b981;">🔩 ${d.matched_device}</div>` : ''}
                 <div class="tooltip-sample">${sample}</div>
@@ -368,7 +369,7 @@ function showDetailPanel(cluster) {
     content.innerHTML = `
         <div class="detail-header">
             <div class="cluster-badge" style="background-color: ${color}20; color: ${color}; border: 1px solid ${color}40">
-                ${cluster.category}
+                ${cluster.category}${cluster.subcategory ? ` / ${cluster.subcategory}` : ""}
             </div>
             <h2 class="detail-title">Cluster ${cluster.id}</h2>
             <div class="detail-stats">

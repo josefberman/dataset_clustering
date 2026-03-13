@@ -22,23 +22,89 @@ app_state = {
     "device_idx": {},       # Inverted index: word -> set of device indices
     "device_idf": {},       # IDF weights: word -> float weight
     "device_by_name": {},   # Fast name -> device info lookup
+    "subcategory_keywords": {},  # category -> {subcategory -> [keywords]}
 }
 
 def infer_category(records):
     """Infer the dominant hardware category from a cluster's records."""
-    text = " ".join(
-        " ".join(str(v) for v in row) for row in records
-    ).lower()
+    import re
+
+    text = " ".join(" ".join(str(v) for v in row) for row in records).lower()
+    # Tokenize on non-alphanumerics to avoid substring bugs (e.g. "monitor" matching "motor")
+    tokens = re.findall(r"[a-z0-9]+", text)
+    if not tokens:
+        return "Other"
+
+    token_counts = Counter(tokens)
     scores = {}
     keywords_dict = app_state.get("category_keywords", {})
+
+    # Hand-tuned keyword boosts for messy inventory text.
+    # These categories are common and should win when their tokens appear,
+    # even if iFixit category/subcategory keywords are sparse.
+    boost_keywords = {
+        "Cable": {
+            "cable", "usb", "lightning", "hdmi", "displayport", "ethernet", "toslink",
+            "sata", "coax", "vga", "dvi", "thunderbolt", "cat5", "cat5e", "cat6",
+        },
+        "Adapter": {
+            "adapter", "dongle", "hub", "converter", "usbc", "usba", "lightning", "hdmi",
+            "displayport", "ethernet",
+        },
+        "Storage": {"ssd", "hdd", "nvme", "microsd", "sd", "flash", "usb", "drive", "nas"},
+        "SIM Card": {"sim", "esim", "nano", "micro"},
+        "Audio": {"headphone", "headphones", "earbud", "earbuds", "over", "ear", "inear", "overear", "mic", "microphone"},
+        "Computer Hardware": {"mouse", "mice", "logitech", "steelseries", "rival", "ergonomic", "wired", "wireless"},
+    }
+
     for cat, keywords in keywords_dict.items():
-        scores[cat] = sum(text.count(kw) for kw in keywords)
-    
+        score = 0
+        for kw in keywords:
+            if not kw:
+                continue
+            for kw_tok in re.findall(r"[a-z0-9]+", str(kw).lower()):
+                score += token_counts.get(kw_tok, 0)
+        # Apply boost if this category has strong evidence in tokens.
+        if cat in boost_keywords:
+            score += 5 * sum(token_counts.get(t, 0) for t in boost_keywords[cat])
+        scores[cat] = score
+
     if not scores:
         return "Other"
-        
+
     best = max(scores, key=scores.get)
     return best if scores[best] > 0 else "Other"
+
+
+def infer_subcategory(records, category: str):
+    """Infer subcategory for a given category based on tokens."""
+    import re
+
+    if not category or category == "Other":
+        return ""
+
+    sub_kw = app_state.get("subcategory_keywords", {}).get(category, {})
+    if not sub_kw:
+        return ""
+
+    text = " ".join(" ".join(str(v) for v in row) for row in records).lower()
+    tokens = re.findall(r"[a-z0-9]+", text)
+    if not tokens:
+        return ""
+
+    token_counts = Counter(tokens)
+    best_sub = ""
+    best_score = 0
+    for sub, kws in sub_kw.items():
+        score = 0
+        for kw in kws:
+            for kw_tok in re.findall(r"[a-z0-9]+", str(kw).lower()):
+                score += token_counts.get(kw_tok, 0)
+        if score > best_score:
+            best_sub = sub
+            best_score = score
+
+    return best_sub if best_score > 0 else ""
 
 
 def build_device_index(device_list):
@@ -73,17 +139,30 @@ def match_device(records):
     if not app_state["device_list"]:
         return None, None, None
 
-    # Build a combined search string from the clustemotor's sample records (first 10)
+    # Build a combined search string from the cluster's sample records (first 10)
     search_text = " ".join(
         " ".join(str(v) for v in row) for row in records[:10]
     )
     # Tokenize: words of 3+ chars (preserving case for device names)
     stop = {"the", "and", "for", "with", "pro", "gen", "new", "plus", "max",
             "mini", "lite", "air", "one", "black", "white", "silver", "inch"}
-    query_tokens = [
-        w.lower() for w in search_text.replace("-", " ").replace("/", " ").split()
-        if len(w) >= 3 and w.lower() not in stop
-    ]
+    def is_informative_token(tok: str) -> bool:
+        # Avoid numeric-only inventory IDs like "427" dominating matches.
+        # Keep alphanumeric model tokens like "m3max" or "xps15".
+        if tok.isdigit():
+            return False
+        if any(ch.isalpha() for ch in tok):
+            return True
+        return False
+
+    query_tokens = []
+    for raw in search_text.replace("-", " ").replace("/", " ").split():
+        tok = raw.lower().strip()
+        if len(tok) < 3 or tok in stop:
+            continue
+        if not is_informative_token(tok):
+            continue
+        query_tokens.append(tok)
     if not query_tokens:
         return None, None, None
 
@@ -91,25 +170,37 @@ def match_device(records):
     idx = app_state["device_idx"]
     idf = app_state["device_idf"]
     candidate_scores = {}
+    candidate_token_sets = {}
     
     # We want to match unique tokens in the query, not repeated ones
     unique_query_tokens = set(query_tokens)
     
     for tok in unique_query_tokens:
-        weight = idf.get(tok, 0)
+        weight = idf.get(tok, 0.0)
+        if weight <= 0:
+            continue
         for dev_i in idx.get(tok, set()):
             candidate_scores[dev_i] = candidate_scores.get(dev_i, 0.0) + weight
+            if dev_i not in candidate_token_sets:
+                candidate_token_sets[dev_i] = set()
+            candidate_token_sets[dev_i].add(tok)
 
     if not candidate_scores:
         return None, None, None
 
     # Pick the device with the highest IDF overlap score
-    best_i = max(candidate_scores, key=candidate_scores.get)
-    best_score = candidate_scores[best_i]
-    
-    # Require a minimum score threshold. A very common word might have an IDF of 2.0.
-    # A rare model number might easily have an IDF of 8.0+.
-    if best_score < 4.0:
+    sorted_candidates = sorted(candidate_scores.items(), key=lambda x: x[1], reverse=True)
+    best_i, best_score = sorted_candidates[0]
+    second_score = sorted_candidates[1][1] if len(sorted_candidates) > 1 else 0.0
+
+    # How many distinct informative tokens contributed to this best match
+    token_count = len(candidate_token_sets.get(best_i, set()))
+
+    # Require:
+    # - a reasonably strong absolute score
+    # - at least 2 distinct matching tokens (to avoid "coffee maker" style random matches)
+    # - the best match to be clearly better than the next-best one
+    if best_score < 6.0 or token_count < 2 or (second_score > 0 and best_score / second_score < 1.2):
         return None, None, None
 
     device = app_state["device_list"][best_i]
@@ -132,8 +223,9 @@ async def lifespan(app: FastAPI):
         app_state["device_idf"] = idf
         app_state["device_by_name"] = by_name
         
-        # Build dynamic CATEGORY_KEYWORDS from the loaded device array
+        # Build dynamic CATEGORY_KEYWORDS and SUBCATEGORY_KEYWORDS from the loaded device array
         dynamic_keywords = {}
+        dynamic_sub_keywords = {}
         for d in app_state["device_list"]:
             cat = d.get("category")
             if not cat: continue
@@ -144,9 +236,14 @@ async def lifespan(app: FastAPI):
             sub = d.get("subcategory")
             if sub:
                 dynamic_keywords[cat].add(sub.lower())
+                dynamic_sub_keywords.setdefault(cat, {}).setdefault(sub, set()).add(sub.lower())
                 
         # Convert sets to lists
         app_state["category_keywords"] = {k: list(v) for k, v in dynamic_keywords.items()}
+        app_state["subcategory_keywords"] = {
+            cat: {sub: list(v) for sub, v in subs.items()}
+            for cat, subs in dynamic_sub_keywords.items()
+        }
         
         print(f"📚 Loaded {len(app_state['device_list']):,} devices, indexed {len(idx):,} word tokens.")
         print(f"🏷️  Built {len(app_state['category_keywords'])} dynamic categories.")
@@ -205,6 +302,7 @@ def get_clusters(threshold: float = 0.3):
     for cluster_id, group in df.groupby("cluster_id"):
         records = group[columns].values.tolist()
         category = infer_category(records)
+        subcategory = infer_subcategory(records, category)
         category_counts[category] += 1
 
         # Limit sample records to 30 for the viz
@@ -217,6 +315,7 @@ def get_clusters(threshold: float = 0.3):
             "id": int(cluster_id),
             "size": len(group),
             "category": category,
+            "subcategory": subcategory,
             "sample_records": sample,
             "columns": columns,
             "matched_device": device_name,
