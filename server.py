@@ -17,10 +17,11 @@ from custom_devices import CUSTOM_DEVICES
 
 # Server config (populated from CLI args when run as __main__)
 SERVER_CONFIG = {
-    "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-    "threshold": 0.5,
+    "model": "minilm-en-he-fp16",
+    "device": "cpu",
+    "threshold": 0.2,
     "batch_size": 512,
-    "data_path": "dirty_hardware_data_40k.csv",
+    "data_path": "data/dirty_hardware_data_40k.csv",
     "host": "localhost",
     "port": 8001,
     "reload": True,
@@ -35,22 +36,27 @@ def parse_args():
         epilog="""
 Examples:
   python server.py
-  python server.py --model sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 --threshold 0.5
+  python server.py --model minilm-en-he-fp16 --threshold 0.2
   python server.py --data my_data.csv --port 9000
   python server.py --no-reload
         """,
     )
     parser.add_argument(
         "--model",
-        default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-        help="Sentence-transformer model for embeddings (default: paraphrase-multilingual-MiniLM-L12-v2)",
+        default="minilm-en-he-fp16",
+        help="Path to local model folder or HuggingFace model ID (default: minilm-en-he-fp16)",
+    )
+    parser.add_argument(
+        "--device",
+        default="cpu",
+        help="Device for embedding model: 'cpu' or 'cuda' (default: cpu)",
     )
     parser.add_argument(
         "--threshold",
         type=float,
-        default=0.5,
+        default=0.2,
         help="Default clustering threshold. Lower = tighter/more clusters, higher = looser/fewer clusters. "
-             "Range 0.1–0.9 (default: 0.5)",
+             "Range 0.1–0.9 (default: 0.2)",
     )
     parser.add_argument(
         "--batch-size",
@@ -60,8 +66,8 @@ Examples:
     )
     parser.add_argument(
         "--data",
-        default="dirty_hardware_data_40k.csv",
-        help="Path to the default CSV dataset (default: dirty_hardware_data_40k.csv)",
+        default="data/dirty_hardware_data_40k.csv",
+        help="Path to the default CSV dataset (default: data/dirty_hardware_data_40k.csv)",
     )
     parser.add_argument(
         "--host",
@@ -106,8 +112,8 @@ def infer_category(records):
     import re
 
     text = " ".join(" ".join(str(v) for v in row) for row in records).lower()
-    # Tokenize on non-alphanumerics to avoid substring bugs (e.g. "monitor" matching "motor")
-    tokens = re.findall(r"[a-z0-9]+", text)
+    # Tokenize: Unicode-aware to support Hebrew and other scripts (avoids substring bugs)
+    tokens = re.findall(r"\w+", text, re.UNICODE)
     if not tokens:
         return "Other"
 
@@ -122,16 +128,21 @@ def infer_category(records):
         "Cable": {
             "cable", "usb", "lightning", "hdmi", "displayport", "ethernet", "toslink",
             "sata", "coax", "vga", "dvi", "thunderbolt", "cat5", "cat5e", "cat6",
+            "כבל", "חוט",  # Hebrew: cable, wire
         },
         "Adapter": {
             "adapter", "dongle", "hub", "converter", "usbc", "usba", "lightning", "hdmi",
             "displayport", "ethernet",
         },
-        "Storage": {"ssd", "hdd", "nvme", "microsd", "sd", "flash", "usb", "drive", "nas"},
+        "Storage": {"ssd", "hdd", "nvme", "microsd", "sd", "flash", "usb", "drive", "nas",
+                   "דיסק", "אחסון", "זיכרון", "כרטיס"},  # Hebrew: disk, storage, memory, card
         "SIM Card": {"sim", "esim", "nano", "micro"},
-        "Audio": {"headphone", "headphones", "earbud", "earbuds", "over", "ear", "inear", "overear", "mic", "microphone"},
+        "Audio": {"headphone", "headphones", "earbud", "earbuds", "over", "ear", "inear", "overear", "mic", "microphone",
+                  "אוזניות", "רמקול", "מיקרופון"},  # Hebrew: headphones, speaker, microphone
         "Computer Hardware": {"mouse", "mice", "logitech", "steelseries", "rival", "ergonomic", "wired", "wireless",
-                             "monitor", "display", "lcd", "led", "ultrawide"},
+                             "monitor", "display", "lcd", "led", "ultrawide",
+                             "מסך", "מקלדת", "עכבר", "מחשב", "מדפסת", "מקרן"},  # Hebrew: screen, keyboard, mouse, computer, printer, projector
+        "Telecom": {"router", "modem", "switch", "wifi", "נתב", "מודם", "רשת"},  # Hebrew: router, modem, network
     }
 
     for cat, keywords in keywords_dict.items():
@@ -139,7 +150,7 @@ def infer_category(records):
         for kw in keywords:
             if not kw:
                 continue
-            for kw_tok in re.findall(r"[a-z0-9]+", str(kw).lower()):
+            for kw_tok in re.findall(r"\w+", str(kw).lower(), re.UNICODE):
                 score += token_counts.get(kw_tok, 0)
         # Apply boost if this category has strong evidence in tokens.
         if cat in boost_keywords:
@@ -165,7 +176,7 @@ def infer_subcategory(records, category: str):
         return ""
 
     text = " ".join(" ".join(str(v) for v in row) for row in records).lower()
-    tokens = re.findall(r"[a-z0-9]+", text)
+    tokens = re.findall(r"\w+", text, re.UNICODE)
     if not tokens:
         return ""
 
@@ -175,7 +186,7 @@ def infer_subcategory(records, category: str):
     for sub, kws in sub_kw.items():
         score = 0
         for kw in kws:
-            for kw_tok in re.findall(r"[a-z0-9]+", str(kw).lower()):
+            for kw_tok in re.findall(r"\w+", str(kw).lower(), re.UNICODE):
                 score += token_counts.get(kw_tok, 0)
         if score > best_score:
             best_sub = sub
@@ -193,10 +204,12 @@ def build_device_index(device_list):
     
     total_docs = len(device_list)
     for i, device in enumerate(device_list):
-        tokens = set(
-            w.lower() for w in device["name"].replace("-", " ").replace("/", " ").split()
-            if len(w) >= 3 and w.lower() not in stop
-        )
+        tokens = set()
+        for w in device["name"].replace("-", " ").replace("/", " ").split():
+            w_lower = w.lower()
+            min_len = 2 if any(ord(c) > 127 for c in w) else 3
+            if len(w) >= min_len and w_lower not in stop:
+                tokens.add(w_lower)
         for tok in tokens:
             idx.setdefault(tok, set()).add(i)
         by_name[device["name"]] = device
@@ -235,7 +248,8 @@ def match_device(records):
     query_tokens = []
     for raw in search_text.replace("-", " ").replace("/", " ").split():
         tok = raw.lower().strip()
-        if len(tok) < 3 or tok in stop:
+        min_len = 2 if any(ord(c) > 127 for c in tok) else 3  # Allow shorter Hebrew/Unicode tokens
+        if len(tok) < min_len or tok in stop:
             continue
         if not is_informative_token(tok):
             continue
@@ -344,7 +358,8 @@ async def lifespan(app: FastAPI):
     # 3. Generate embeddings
     model_name = SERVER_CONFIG["model"]
     batch_size = SERVER_CONFIG["batch_size"]
-    app_state["embeddings"] = generate_embeddings(texts, model_name, batch_size)
+    device = SERVER_CONFIG.get("device", "cpu")
+    app_state["embeddings"] = generate_embeddings(texts, model_name, batch_size, device=device)
     print("✅ Initialization complete. Ready to serve requests!")
     
     yield
@@ -478,7 +493,7 @@ def export_clusters_excel(threshold: float = None):
 
 
 @app.post("/api/upload")
-async def upload_dataset(file: UploadFile = File(...), threshold: float = Form(0.5)):
+async def upload_dataset(file: UploadFile = File(...), threshold: float = Form(0.2)):
     print(f"📥 Received file upload: {file.filename}")
     
     try:
@@ -508,7 +523,8 @@ async def upload_dataset(file: UploadFile = File(...), threshold: float = Form(0
         texts = build_text_representations(df)
         model_name = SERVER_CONFIG["model"]
         batch_size = SERVER_CONFIG["batch_size"]
-        app_state["embeddings"] = generate_embeddings(texts, model_name, batch_size)
+        device = SERVER_CONFIG.get("device", "cpu")
+        app_state["embeddings"] = generate_embeddings(texts, model_name, batch_size, device=device)
         
         # Trigger reclustering using the global method we already have
         return get_clusters(threshold)
@@ -525,6 +541,7 @@ if __name__ == "__main__":
     import uvicorn
     args = parse_args()
     SERVER_CONFIG["model"] = args.model
+    SERVER_CONFIG["device"] = args.device
     SERVER_CONFIG["threshold"] = args.threshold
     SERVER_CONFIG["batch_size"] = args.batch_size
     SERVER_CONFIG["data_path"] = args.data

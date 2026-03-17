@@ -36,7 +36,7 @@ CATEGORY_KEYWORDS = load_category_keywords()
 
 
 def main():
-    input_file = sys.argv[1] if len(sys.argv) > 1 else "clustered_output.csv"
+    input_file = sys.argv[1] if len(sys.argv) > 1 else "data/clustered_output.csv"
     output_file = sys.argv[2] if len(sys.argv) > 2 else "cluster_viz/data.json"
 
     print(f"📂 Loading {input_file}...")

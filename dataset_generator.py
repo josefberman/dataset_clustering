@@ -1,10 +1,11 @@
+import os
 import pandas as pd
 import random
 import re
 
 # Configuration
 NUM_RECORDS = 100000
-OUTPUT_FILE = "dirty_hardware_data_40k.csv"
+OUTPUT_FILE = "data/dirty_hardware_data_40k.csv"
 
 # Base Data Templates
 hardware_templates = {
@@ -86,6 +87,7 @@ for _ in range(NUM_RECORDS):
 
 # Create DataFrame and Save
 df = pd.DataFrame(data, columns=["Type of hardware", "Model", "Submodel"])
+os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
 df.to_csv(OUTPUT_FILE, index=False)
 
 print(f"Successfully generated {NUM_RECORDS} EXTREMELY dirty records in {OUTPUT_FILE}")

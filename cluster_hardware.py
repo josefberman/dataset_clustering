@@ -7,11 +7,12 @@ For large datasets (>10K rows), uses a two-phase approach:
   Phase 2: Run agglomerative clustering within each chunk, then merge labels
 
 Usage:
-    python cluster_hardware.py --input dirty_hardware_data_40k.csv --threshold 0.3
-    python cluster_hardware.py --input dirty_hardware_data_40k.csv --threshold 0.2 --sample-size 5000
+    python cluster_hardware.py --input data/dirty_hardware_data_40k.csv --threshold 0.3
+    python cluster_hardware.py --input data/dirty_hardware_data_40k.csv --threshold 0.2 --sample-size 5000
 """
 
 import argparse
+import os
 import time
 import sys
 
@@ -30,12 +31,12 @@ def parse_args():
         description="Cluster dirty hardware CSV records using embeddings + agglomerative clustering."
     )
     parser.add_argument(
-        "--input", default="dirty_hardware_data_40k.csv",
-        help="Path to the input CSV file (default: dirty_hardware_data_40k.csv)"
+        "--input", default="data/dirty_hardware_data_40k.csv",
+        help="Path to the input CSV file (default: data/dirty_hardware_data_40k.csv)"
     )
     parser.add_argument(
-        "--output", default="clustered_output.csv",
-        help="Path to the output CSV file (default: clustered_output.csv)"
+        "--output", default="data/clustered_output.csv",
+        help="Path to the output CSV file (default: data/clustered_output.csv)"
     )
     parser.add_argument(
         "--threshold", type=float, default=0.3,
@@ -51,8 +52,12 @@ def parse_args():
         help="Use only the first N rows for quick testing (default: use all rows)"
     )
     parser.add_argument(
-        "--model", default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-        help="Sentence-transformer model name (default: paraphrase-multilingual-MiniLM-L12-v2)"
+        "--model", default="minilm-en-he-fp16",
+        help="Path to local model folder or HuggingFace model ID (default: minilm-en-he-fp16)"
+    )
+    parser.add_argument(
+        "--device", default="cpu",
+        help="Device for embedding model: 'cpu' or 'cuda' (default: cpu, avoids CUDA index errors with some models)"
     )
     parser.add_argument(
         "--pre-clusters", type=int, default=None,
@@ -79,10 +84,16 @@ def build_text_representations(df):
     return texts
 
 
-def generate_embeddings(texts, model_name, batch_size):
+def generate_embeddings(texts, model_name, batch_size, device="cpu"):
     """Generate embeddings using a sentence-transformer model."""
-    print(f"🤖 Loading model '{model_name}'...")
-    model = SentenceTransformer(model_name)
+    # Resolve local paths to absolute (avoids cwd issues)
+    if "/" not in model_name or os.path.exists(model_name):
+        model_path = os.path.abspath(model_name)
+    else:
+        model_path = model_name
+
+    print(f"🤖 Loading model '{model_path}' on {device}...")
+    model = SentenceTransformer(model_path, device=device)
 
     print(f"⚡ Generating embeddings for {len(texts):,} texts (batch_size={batch_size})...")
     t0 = time.time()
@@ -227,7 +238,7 @@ def main():
     texts = build_text_representations(df)
 
     # 3. Generate embeddings
-    embeddings = generate_embeddings(texts, args.model, args.batch_size)
+    embeddings = generate_embeddings(texts, args.model, args.batch_size, device=args.device)
 
     # 4. Cluster
     labels = cluster_embeddings(embeddings, args.threshold, args.pre_clusters)

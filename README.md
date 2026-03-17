@@ -19,7 +19,8 @@ An interactive web application that clusters dirty hardware inventory data using
 
 ### Backend
 
-- **Embedding-based clustering**: Uses sentence-transformers (`paraphrase-multilingual-MiniLM-L12-v2`) for semantic similarity.
+- **Embedding-based clustering**: Uses sentence-transformers with the local `minilm-en-he-fp16` model (or a HuggingFace model ID) for semantic similarity.
+- **Hebrew & multilingual support**: The model and tokenization support Hebrew and other Unicode scripts. Category inference includes Hebrew keywords (e.g. מסך, מקלדת, עכבר).
 - **Dynamic category inference**: Token-based matching against iFixit categories and `custom_devices.py`.
 - **Subcategory inference**: Finer-grained labels (e.g., Keyboard, Monitor, Printer) derived from the device list.
 - **Device matching**: IDF-scored matching of cluster records to iFixit devices and custom entries.
@@ -45,6 +46,10 @@ The app uses two device sources:
 | **Telecom** | Router, Modem, Network Switch, Access Point, enterprise gear |
 
 Edit `custom_devices.py` to add or adjust devices. Each entry has `name`, `category`, `subcategory`, and optional `url`.
+
+### Hebrew / Multilingual Datasets
+
+The app works with Hebrew and other Unicode datasets. The default model (`paraphrase-multilingual-MiniLM-L12-v2`) supports 50+ languages. Category inference includes Hebrew boost keywords (מסך, מקלדת, עכבר, כבל, etc.), and `custom_devices.py` has Hebrew device entries for matching. Upload a Hebrew CSV and the clustering and categorization will work out of the box.
 
 ## Getting Started
 
@@ -83,19 +88,28 @@ conda run -n dataset_clustering python server.py
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--model` | `paraphrase-multilingual-MiniLM-L12-v2` | Sentence-transformer model for embeddings |
-| `--threshold` | `0.5` | Default clustering threshold (0.1–0.9) |
+| `--model` | `minilm-en-he-fp16` | Path to local model folder or HuggingFace ID |
+| `--device` | `cpu` | Device for embeddings: `cpu` or `cuda` |
+| `--threshold` | `0.2` | Default clustering threshold (0.1–0.9) |
 | `--batch-size` | `512` | Batch size for embedding generation |
-| `--data` | `dirty_hardware_data_40k.csv` | Path to default CSV dataset |
+| `--data` | `data/dirty_hardware_data_40k.csv` | Path to default CSV dataset |
 | `--host` | `localhost` | Host to bind |
 | `--port` | `8001` | Port to run on |
 | `--no-reload` | — | Disable auto-reload on file changes |
 
-The server loads the default dataset (`dirty_hardware_data_40k.csv`), generates embeddings on startup, and serves the visualization. Use **Recalculate Clusters** or **Upload Dataset** to change the data or clustering.
+The server loads the default dataset (`data/dirty_hardware_data_40k.csv`), generates embeddings on startup, and serves the visualization. Use **Recalculate Clusters** or **Upload Dataset** to change the data or clustering.
+
+## Model
+
+The default embedding model is the local `minilm-en-he-fp16` folder in the project root (sentence-transformers compatible). Place your model files there, or pass a HuggingFace model ID via `--model`.
+
+## Data
+
+CSV files live in the `data/` folder. The default dataset is `data/dirty_hardware_data_40k.csv`. Use `--data` or `--input`/`--output` to point scripts at other paths.
 
 ## Data Processing Workflow
 
-- `dataset_generator.py`: Generates raw `dirty_hardware_data.csv`.
-- `cluster_hardware.py`: Produces `clustered_output.csv` from embeddings and clustering.
+- `dataset_generator.py`: Generates raw `data/dirty_hardware_data_40k.csv`.
+- `cluster_hardware.py`: Produces `data/clustered_output.csv` from embeddings and clustering.
 - `prepare_viz_data.py`: Builds static `cluster_viz/data.json` for the legacy static workflow.
 - `server.py`: Serves the live app with on-demand clustering and device matching.
