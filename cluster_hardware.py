@@ -51,8 +51,8 @@ def parse_args():
         help="Use only the first N rows for quick testing (default: use all rows)"
     )
     parser.add_argument(
-        "--model", default="all-MiniLM-L6-v2",
-        help="Sentence-transformer model name (default: all-MiniLM-L6-v2)"
+        "--model", default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        help="Sentence-transformer model name (default: paraphrase-multilingual-MiniLM-L12-v2)"
     )
     parser.add_argument(
         "--pre-clusters", type=int, default=None,

@@ -1,9 +1,11 @@
+import argparse
 import json
 from collections import Counter
 import os
 import math
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -12,6 +14,80 @@ import io
 
 from cluster_hardware import load_data, build_text_representations, generate_embeddings, cluster_embeddings
 from custom_devices import CUSTOM_DEVICES
+
+# Server config (populated from CLI args when run as __main__)
+SERVER_CONFIG = {
+    "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    "threshold": 0.5,
+    "batch_size": 512,
+    "data_path": "dirty_hardware_data_40k.csv",
+    "host": "localhost",
+    "port": 8001,
+    "reload": True,
+}
+
+
+def parse_args():
+    """Parse command-line arguments for the server."""
+    parser = argparse.ArgumentParser(
+        description="Cluster visualization server: load hardware data, generate embeddings, serve the interactive GUI.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python server.py
+  python server.py --model sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 --threshold 0.5
+  python server.py --data my_data.csv --port 9000
+  python server.py --no-reload
+        """,
+    )
+    parser.add_argument(
+        "--model",
+        default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        help="Sentence-transformer model for embeddings (default: paraphrase-multilingual-MiniLM-L12-v2)",
+    )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=0.5,
+        help="Default clustering threshold. Lower = tighter/more clusters, higher = looser/fewer clusters. "
+             "Range 0.1–0.9 (default: 0.5)",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=512,
+        help="Batch size for embedding generation (default: 512)",
+    )
+    parser.add_argument(
+        "--data",
+        default="dirty_hardware_data_40k.csv",
+        help="Path to the default CSV dataset (default: dirty_hardware_data_40k.csv)",
+    )
+    parser.add_argument(
+        "--host",
+        default="localhost",
+        help="Host to bind the server (default: localhost)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8001,
+        help="Port to run the server on (default: 8001)",
+    )
+    parser.add_argument(
+        "--reload",
+        action="store_true",
+        default=True,
+        help="Enable auto-reload on file changes (default: True)",
+    )
+    parser.add_argument(
+        "--no-reload",
+        action="store_false",
+        dest="reload",
+        help="Disable auto-reload",
+    )
+    return parser.parse_args()
+
 
 # Global state to hold embeddings in memory so we don't recompute
 app_state = {
@@ -54,7 +130,8 @@ def infer_category(records):
         "Storage": {"ssd", "hdd", "nvme", "microsd", "sd", "flash", "usb", "drive", "nas"},
         "SIM Card": {"sim", "esim", "nano", "micro"},
         "Audio": {"headphone", "headphones", "earbud", "earbuds", "over", "ear", "inear", "overear", "mic", "microphone"},
-        "Computer Hardware": {"mouse", "mice", "logitech", "steelseries", "rival", "ergonomic", "wired", "wireless"},
+        "Computer Hardware": {"mouse", "mice", "logitech", "steelseries", "rival", "ergonomic", "wired", "wireless",
+                             "monitor", "display", "lcd", "led", "ultrawide"},
     }
 
     for cat, keywords in keywords_dict.items():
@@ -251,7 +328,8 @@ async def lifespan(app: FastAPI):
         print("⚠️  ifixit_devices.json not found. Run fetch_ifixit_devices.py first.")
     
     # 1. Load data
-    df = load_data("dirty_hardware_data_40k.csv")
+    data_path = SERVER_CONFIG["data_path"]
+    df = load_data(data_path)
     
     # We strip out the generated cluster id if it already existed in the dataset
     if "cluster_id" in df.columns:
@@ -264,7 +342,9 @@ async def lifespan(app: FastAPI):
     texts = build_text_representations(df)
 
     # 3. Generate embeddings
-    app_state["embeddings"] = generate_embeddings(texts, "all-MiniLM-L6-v2", 512)
+    model_name = SERVER_CONFIG["model"]
+    batch_size = SERVER_CONFIG["batch_size"]
+    app_state["embeddings"] = generate_embeddings(texts, model_name, batch_size)
     print("✅ Initialization complete. Ready to serve requests!")
     
     yield
@@ -283,7 +363,9 @@ app.add_middleware(
 
 
 @app.get("/api/clusters")
-def get_clusters(threshold: float = 0.3):
+def get_clusters(threshold: float = None):
+    if threshold is None:
+        threshold = SERVER_CONFIG["threshold"]
     print(f"🔄 Reclustering with threshold {threshold}...")
     
     # 1. Run clustering with the requested threshold
@@ -337,6 +419,64 @@ def get_clusters(threshold: float = 0.3):
     
     return viz_data
 
+
+@app.get("/api/export")
+def export_clusters_excel(threshold: float = None):
+    """Export all clusters to Excel: original columns + cluster_id, cluster_category, cluster_subcategory, matched_device."""
+    if threshold is None:
+        threshold = SERVER_CONFIG["threshold"]
+    print(f"📤 Exporting clusters (threshold={threshold}) to Excel...")
+
+    try:
+        if app_state["embeddings"] is None or app_state["df"] is None:
+            raise HTTPException(status_code=503, detail="Data not loaded yet. Wait for the server to finish initializing.")
+    except HTTPException:
+        raise
+
+    try:
+        labels = cluster_embeddings(app_state["embeddings"], threshold)
+        df = app_state["df"].copy()
+        df["cluster_id"] = labels
+        columns = app_state["columns"]
+
+        # Build cluster metadata for each cluster
+        cluster_meta = {}
+        for cluster_id, group in df.groupby("cluster_id"):
+            records = group[columns].values.tolist()
+            category = infer_category(records)
+            subcategory = infer_subcategory(records, category)
+            device_name, _, _ = match_device(records)
+            cluster_meta[int(cluster_id)] = {
+                "cluster_category": category,
+                "cluster_subcategory": subcategory,
+                "matched_device": device_name or "",
+            }
+
+        # Add metadata columns to each row
+        df["cluster_category"] = df["cluster_id"].map(lambda cid: cluster_meta.get(int(cid), {}).get("cluster_category", ""))
+        df["cluster_subcategory"] = df["cluster_id"].map(lambda cid: cluster_meta.get(int(cid), {}).get("cluster_subcategory", ""))
+        df["matched_device"] = df["cluster_id"].map(lambda cid: cluster_meta.get(int(cid), {}).get("matched_device", ""))
+
+        # Reorder: original columns first, then cluster_id, category, subcategory, matched_device
+        export_columns = columns + ["cluster_id", "cluster_category", "cluster_subcategory", "matched_device"]
+        export_df = df[export_columns]
+
+        buffer = io.BytesIO()
+        export_df.to_excel(buffer, index=False, engine="openpyxl")
+        buffer.seek(0)
+
+        return StreamingResponse(
+            buffer,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=clusters_export.xlsx"},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Export error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/upload")
 async def upload_dataset(file: UploadFile = File(...), threshold: float = Form(0.5)):
     print(f"📥 Received file upload: {file.filename}")
@@ -366,7 +506,9 @@ async def upload_dataset(file: UploadFile = File(...), threshold: float = Form(0
         
         # Generate new embeddings
         texts = build_text_representations(df)
-        app_state["embeddings"] = generate_embeddings(texts, "all-MiniLM-L6-v2", 512)
+        model_name = SERVER_CONFIG["model"]
+        batch_size = SERVER_CONFIG["batch_size"]
+        app_state["embeddings"] = generate_embeddings(texts, model_name, batch_size)
         
         # Trigger reclustering using the global method we already have
         return get_clusters(threshold)
@@ -381,4 +523,17 @@ app.mount("/", StaticFiles(directory="cluster_viz", html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("server:app", host="0.0.0.0", port=8001, reload=True)
+    args = parse_args()
+    SERVER_CONFIG["model"] = args.model
+    SERVER_CONFIG["threshold"] = args.threshold
+    SERVER_CONFIG["batch_size"] = args.batch_size
+    SERVER_CONFIG["data_path"] = args.data
+    SERVER_CONFIG["host"] = args.host
+    SERVER_CONFIG["port"] = args.port
+    SERVER_CONFIG["reload"] = args.reload
+    uvicorn.run(
+        "server:app",
+        host=SERVER_CONFIG["host"],
+        port=SERVER_CONFIG["port"],
+        reload=SERVER_CONFIG["reload"],
+    )

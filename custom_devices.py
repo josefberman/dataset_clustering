@@ -78,6 +78,8 @@ CUSTOM_DEVICES = [
     {"name": "4K Monitor", "category": "Computer Hardware", "subcategory": "Monitor", "url": ""},
     {"name": "LG UltraGear Monitor", "category": "Computer Hardware", "subcategory": "Monitor", "url": ""},
     {"name": "Ultrawide Monitor", "category": "Computer Hardware", "subcategory": "Monitor", "url": ""},
+    {"name": "Samsung Monitor", "category": "Computer Hardware", "subcategory": "Monitor", "url": ""},
+    {"name": "Samsung Display", "category": "Computer Hardware", "subcategory": "Monitor", "url": ""},
     {"name": "Webcam", "category": "Computer Hardware", "subcategory": "Webcam", "url": ""},
     {"name": "HD Webcam", "category": "Computer Hardware", "subcategory": "Webcam", "url": ""},
     {"name": "Dashcam", "category": "Computer Hardware", "subcategory": "Dashcam", "url": ""},

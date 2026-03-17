@@ -19,7 +19,7 @@ An interactive web application that clusters dirty hardware inventory data using
 
 ### Backend
 
-- **Embedding-based clustering**: Uses sentence-transformers (`all-MiniLM-L6-v2`) for semantic similarity.
+- **Embedding-based clustering**: Uses sentence-transformers (`paraphrase-multilingual-MiniLM-L12-v2`) for semantic similarity.
 - **Dynamic category inference**: Token-based matching against iFixit categories and `custom_devices.py`.
 - **Subcategory inference**: Finer-grained labels (e.g., Keyboard, Monitor, Printer) derived from the device list.
 - **Device matching**: IDF-scored matching of cluster records to iFixit devices and custom entries.
@@ -78,6 +78,18 @@ conda run -n dataset_clustering python server.py
 ```
 
 2. Open [http://localhost:8001](http://localhost:8001) in your browser.
+
+**Command-line options** (run `python server.py --help` for details):
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--model` | `paraphrase-multilingual-MiniLM-L12-v2` | Sentence-transformer model for embeddings |
+| `--threshold` | `0.5` | Default clustering threshold (0.1–0.9) |
+| `--batch-size` | `512` | Batch size for embedding generation |
+| `--data` | `dirty_hardware_data_40k.csv` | Path to default CSV dataset |
+| `--host` | `localhost` | Host to bind |
+| `--port` | `8001` | Port to run on |
+| `--no-reload` | — | Disable auto-reload on file changes |
 
 The server loads the default dataset (`dirty_hardware_data_40k.csv`), generates embeddings on startup, and serves the visualization. Use **Recalculate Clusters** or **Upload Dataset** to change the data or clustering.
 

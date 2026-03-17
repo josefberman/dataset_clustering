@@ -190,6 +190,57 @@ function setupUI() {
         filterNodesBySize(1);
     });
 
+    // Export to Excel
+    document.getElementById("export-btn").addEventListener("click", async () => {
+        try {
+            // Open save dialog first (requires user gesture) before any async work
+            let fileHandle = null;
+            if ("showSaveFilePicker" in window) {
+                try {
+                    fileHandle = await window.showSaveFilePicker({
+                        suggestedName: "clusters_export.xlsx",
+                        types: [{ description: "Excel workbook", accept: { "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"] } }],
+                    });
+                } catch (e) {
+                    if (e.name === "AbortError") return;
+                    // Fall back to download if save picker fails (e.g. Firefox, Safari)
+                    fileHandle = null;
+                }
+            }
+
+            const response = await fetch(`/api/export?threshold=${currentThreshold}`);
+            if (!response.ok) {
+                const errText = await response.text();
+                let msg = "Export failed";
+                try {
+                    const errJson = JSON.parse(errText);
+                    msg = errJson.detail || errJson.message || msg;
+                } catch (_) {
+                    if (errText) msg = errText.slice(0, 200);
+                }
+                throw new Error(msg);
+            }
+            const blob = await response.blob();
+
+            if (fileHandle) {
+                const writable = await fileHandle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+            } else {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "clusters_export.xlsx";
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+        } catch (err) {
+            if (err.name === "AbortError") return; // User cancelled
+            console.error("Export failed:", err);
+            alert("Export failed: " + (err.message || String(err)));
+        }
+    });
+
     document.getElementById("close-detail").addEventListener("click", closeDetailPanel);
 }
 
