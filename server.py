@@ -17,9 +17,9 @@ from custom_devices import CUSTOM_DEVICES
 
 # Server config (populated from CLI args when run as __main__)
 SERVER_CONFIG = {
-    "model": "minilm-en-he-fp16",
+    "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
     "device": "cpu",
-    "threshold": 0.2,
+    "threshold": 0.3,
     "batch_size": 512,
     "data_path": "data/dirty_hardware_data_40k.csv",
     "host": "localhost",
@@ -36,15 +36,15 @@ def parse_args():
         epilog="""
 Examples:
   python server.py
-  python server.py --model minilm-en-he-fp16 --threshold 0.2
+  python server.py --model sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 --threshold 0.3
   python server.py --data my_data.csv --port 9000
   python server.py --no-reload
         """,
     )
     parser.add_argument(
         "--model",
-        default="minilm-en-he-fp16",
-        help="Path to local model folder or HuggingFace model ID (default: minilm-en-he-fp16)",
+        default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        help="Path to local model folder or HuggingFace model ID (default: paraphrase-multilingual-MiniLM-L12-v2)",
     )
     parser.add_argument(
         "--device",
@@ -54,9 +54,9 @@ Examples:
     parser.add_argument(
         "--threshold",
         type=float,
-        default=0.2,
+        default=0.3,
         help="Default clustering threshold. Lower = tighter/more clusters, higher = looser/fewer clusters. "
-             "Range 0.1–0.9 (default: 0.2)",
+             "Range 0.1–0.9 (default: 0.3)",
     )
     parser.add_argument(
         "--batch-size",
@@ -493,7 +493,7 @@ def export_clusters_excel(threshold: float = None):
 
 
 @app.post("/api/upload")
-async def upload_dataset(file: UploadFile = File(...), threshold: float = Form(0.2)):
+async def upload_dataset(file: UploadFile = File(...), threshold: float = Form(0.3)):
     print(f"📥 Received file upload: {file.filename}")
     
     try:

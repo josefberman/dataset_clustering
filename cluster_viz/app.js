@@ -24,7 +24,7 @@ let zoom = null;
 let nodeSelection = null;
 
 // Initialization
-let currentThreshold = 0.20;
+let currentThreshold = 0.30;
 
 async function init() {
     await fetchAndRenderData();
