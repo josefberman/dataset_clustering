@@ -52,8 +52,8 @@ def parse_args():
         help="Use only the first N rows for quick testing (default: use all rows)"
     )
     parser.add_argument(
-        "--model", default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-        help="Path to local model folder or HuggingFace model ID (default: paraphrase-multilingual-MiniLM-L12-v2)"
+        "--model", default="Qwen/Qwen3-Embedding-0.6B",
+        help="Path to local model folder or HuggingFace model ID (default: Qwen3-Embedding-0.6B)"
     )
     parser.add_argument(
         "--device", default="cpu",

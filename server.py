@@ -17,7 +17,7 @@ from custom_devices import CUSTOM_DEVICES
 
 # Server config (populated from CLI args when run as __main__)
 SERVER_CONFIG = {
-    "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    "model": "Qwen/Qwen3-Embedding-0.6B",
     "device": "cpu",
     "threshold": 0.3,
     "batch_size": 512,
@@ -36,15 +36,15 @@ def parse_args():
         epilog="""
 Examples:
   python server.py
-  python server.py --model sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 --threshold 0.3
+  python server.py --model Qwen/Qwen3-Embedding-0.6B --threshold 0.3
   python server.py --data my_data.csv --port 9000
   python server.py --no-reload
         """,
     )
     parser.add_argument(
         "--model",
-        default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-        help="Path to local model folder or HuggingFace model ID (default: paraphrase-multilingual-MiniLM-L12-v2)",
+        default="Qwen/Qwen3-Embedding-0.6B",
+        help="Path to local model folder or HuggingFace model ID (default: Qwen3-Embedding-0.6B)",
     )
     parser.add_argument(
         "--device",
