@@ -19,7 +19,7 @@ An interactive web application that clusters dirty hardware inventory data using
 
 ### Backend
 
-- **Embedding-based clustering**: Uses sentence-transformers with `Qwen/Qwen3-Embedding-0.6B` (or another HuggingFace model ID) for semantic similarity.
+- **Embedding-based clustering**: Uses sentence-transformers with `paraphrase-multilingual-MiniLM-L12-v2` (or another HuggingFace model ID) for semantic similarity.
 - **Hebrew & multilingual support**: The model and tokenization support Hebrew and other Unicode scripts. Category inference includes Hebrew keywords (e.g. מסך, מקלדת, עכבר).
 - **Dynamic category inference**: Token-based matching against iFixit categories and `custom_devices.py`.
 - **Subcategory inference**: Finer-grained labels (e.g., Keyboard, Monitor, Printer) derived from the device list.
@@ -49,7 +49,7 @@ Edit `custom_devices.py` to add or adjust devices. Each entry has `name`, `categ
 
 ### Hebrew / Multilingual Datasets
 
-The app works with Hebrew and other Unicode datasets. The default model (`Qwen/Qwen3-Embedding-0.6B`) supports 50+ languages. Category inference includes Hebrew boost keywords (מסך, מקלדת, עכבר, כבל, etc.), and `custom_devices.py` has Hebrew device entries for matching. Upload a Hebrew CSV and the clustering and categorization will work out of the box.
+The app works with Hebrew and other Unicode datasets. The default model (`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`) supports 50+ languages. Category inference includes Hebrew boost keywords (מסך, מקלדת, עכבר, כבל, etc.), and `custom_devices.py` has Hebrew device entries for matching. Upload a Hebrew CSV and the clustering and categorization will work out of the box.
 
 ## Getting Started
 
@@ -88,7 +88,7 @@ conda run -n dataset_clustering python server.py
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--model` | `Qwen/Qwen3-Embedding-0.6B` | Path to local model folder or HuggingFace ID |
+| `--model` | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | Path to local model folder or HuggingFace ID |
 | `--device` | `cpu` | Device for embeddings: `cpu` or `cuda` |
 | `--threshold` | `0.3` | Default clustering threshold (0.1–0.9) |
 | `--batch-size` | `512` | Batch size for embedding generation |
@@ -101,7 +101,7 @@ The server loads the default dataset (`data/dirty_hardware_data_40k.csv`), gener
 
 ## Model
 
-The default embedding model is `Qwen/Qwen3-Embedding-0.6B` (sentence-transformers compatible). Use `--model` to pass a local model folder or another HuggingFace model ID.
+The default embedding model is `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`. Use `--model` to pass a local model folder or another HuggingFace model ID.
 
 ## Data
 
