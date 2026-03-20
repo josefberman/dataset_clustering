@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import json
 from collections import Counter
 import os
@@ -99,6 +100,8 @@ Examples:
 app_state = {
     "df": None,
     "embeddings": None,
+    "embeddings_status": "idle",  # idle | loading | ready | error
+    "embeddings_error": None,
     "columns": None,
     "device_list": [],      # Flat list of iFixit devices
     "device_idx": {},       # Inverted index: word -> set of device indices
@@ -300,7 +303,7 @@ def match_device(records):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("🚀 Starting up server and generating initial embeddings...")
+    print("🚀 Starting up server...")
     
     # 0. Load iFixit device catalog and build inverted index
     if os.path.exists("ifixit_devices.json"):
@@ -352,21 +355,71 @@ async def lifespan(app: FastAPI):
     app_state["columns"] = df.columns.tolist()
     app_state["df"] = df
     
-    # 2. Build text representations
+    # 2. Build text representations (fast); embeddings run in background so the GUI can load immediately
     texts = build_text_representations(df)
-
-    # 3. Generate embeddings
     model_name = SERVER_CONFIG["model"]
     batch_size = SERVER_CONFIG["batch_size"]
     device = SERVER_CONFIG.get("device", "cpu")
-    app_state["embeddings"] = generate_embeddings(texts, model_name, batch_size, device=device)
-    print("✅ Initialization complete. Ready to serve requests!")
-    
+
+    app_state["embeddings"] = None
+    app_state["embeddings_status"] = "loading"
+    app_state["embeddings_error"] = None
+
+    async def _compute_initial_embeddings():
+        try:
+            emb = await asyncio.to_thread(
+                generate_embeddings, texts, model_name, batch_size, device
+            )
+            app_state["embeddings"] = emb
+            app_state["embeddings_status"] = "ready"
+            print("✅ Initial embeddings ready.")
+        except Exception as e:
+            app_state["embeddings_status"] = "error"
+            app_state["embeddings_error"] = str(e)
+            print(f"❌ Initial embedding failed: {e}")
+
+    embed_task = asyncio.create_task(_compute_initial_embeddings())
+    print(f"📂 GUI is live; generating embeddings in the background ({len(texts):,} rows)...")
+
     yield
-    
+
+    embed_task.cancel()
+    try:
+        await embed_task
+    except asyncio.CancelledError:
+        pass
     print("🛑 Shutting down server...")
 
 app = FastAPI(lifespan=lifespan)
+
+
+def _require_embeddings_ready():
+    """Raise 503 until initial (or upload) embeddings exist."""
+    st = app_state.get("embeddings_status")
+    if st == "loading":
+        raise HTTPException(
+            status_code=503,
+            detail="Embeddings are still being generated. The UI will update when ready.",
+        )
+    if st == "error":
+        raise HTTPException(
+            status_code=503,
+            detail=app_state.get("embeddings_error") or "Embedding generation failed.",
+        )
+    if app_state.get("embeddings") is None:
+        raise HTTPException(status_code=503, detail="Embeddings not available yet.")
+
+
+@app.get("/api/status")
+def api_status():
+    """Lightweight readiness check for the frontend while embeddings compute."""
+    df = app_state.get("df")
+    return {
+        "embeddings_status": app_state.get("embeddings_status", "idle"),
+        "embeddings_error": app_state.get("embeddings_error"),
+        "row_count": len(df) if df is not None else 0,
+    }
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -379,6 +432,7 @@ app.add_middleware(
 
 @app.get("/api/clusters")
 def get_clusters(threshold: float = None):
+    _require_embeddings_ready()
     if threshold is None:
         threshold = SERVER_CONFIG["threshold"]
     print(f"🔄 Reclustering with threshold {threshold}...")
@@ -442,11 +496,9 @@ def export_clusters_excel(threshold: float = None):
         threshold = SERVER_CONFIG["threshold"]
     print(f"📤 Exporting clusters (threshold={threshold}) to Excel...")
 
-    try:
-        if app_state["embeddings"] is None or app_state["df"] is None:
-            raise HTTPException(status_code=503, detail="Data not loaded yet. Wait for the server to finish initializing.")
-    except HTTPException:
-        raise
+    _require_embeddings_ready()
+    if app_state["df"] is None:
+        raise HTTPException(status_code=503, detail="Data not loaded yet.")
 
     try:
         labels = cluster_embeddings(app_state["embeddings"], threshold)
@@ -516,19 +568,41 @@ async def upload_dataset(file: UploadFile = File(...), threshold: float = Form(0
         if "cluster_id" in df.columns:
              df = df.drop(columns=["cluster_id"])
              
+        prev_df = app_state["df"]
+        prev_cols = app_state["columns"]
+        prev_emb = app_state["embeddings"]
+        prev_status = app_state.get("embeddings_status")
+
         app_state["columns"] = df.columns.tolist()
         app_state["df"] = df
-        
-        # Generate new embeddings
+
+        # Generate new embeddings (upload path: synchronous so response includes full cluster payload)
         texts = build_text_representations(df)
         model_name = SERVER_CONFIG["model"]
         batch_size = SERVER_CONFIG["batch_size"]
         device = SERVER_CONFIG.get("device", "cpu")
-        app_state["embeddings"] = generate_embeddings(texts, model_name, batch_size, device=device)
-        
+        app_state["embeddings_status"] = "loading"
+        app_state["embeddings_error"] = None
+        try:
+            app_state["embeddings"] = generate_embeddings(
+                texts, model_name, batch_size, device=device
+            )
+            app_state["embeddings_status"] = "ready"
+        except Exception as embed_err:
+            # Restore previous dataset so the app stays usable
+            app_state["df"] = prev_df
+            app_state["columns"] = prev_cols
+            app_state["embeddings"] = prev_emb
+            app_state["embeddings_status"] = prev_status or "ready"
+            app_state["embeddings_error"] = str(embed_err)
+            print(f"❌ Embedding failed after upload: {embed_err}")
+            raise HTTPException(status_code=500, detail=str(embed_err))
+
         # Trigger reclustering using the global method we already have
         return get_clusters(threshold)
         
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"❌ Error processing upload: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

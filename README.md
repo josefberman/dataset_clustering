@@ -97,7 +97,7 @@ conda run -n dataset_clustering python server.py
 | `--port` | `8001` | Port to run on |
 | `--no-reload` | — | Disable auto-reload on file changes |
 
-The server loads the default dataset (`data/dirty_hardware_data_40k.csv`), generates embeddings on startup, and serves the visualization. Use **Recalculate Clusters** or **Upload Dataset** to change the data or clustering.
+The server loads the default dataset (`data/dirty_hardware_data_40k.csv`) and **serves the GUI immediately**; initial embeddings run in the background (the graph appears when they finish—see `/api/status`). Use **Recalculate Clusters** or **Upload Dataset** to change the data or clustering.
 
 ## Model
 

@@ -26,18 +26,71 @@ let nodeSelection = null;
 // Initialization
 let currentThreshold = 0.30;
 
+/** Poll until initial embeddings exist (server serves the GUI before embeddings finish). */
+async function ensureEmbeddingsReady() {
+    const overlay = document.getElementById("embedding-overlay");
+    const textEl = document.getElementById("embedding-overlay-text");
+    const hintEl = overlay?.querySelector(".embedding-overlay-hint");
+    const showOverlay = () => overlay?.classList.remove("is-hidden");
+    const hideOverlay = () => overlay?.classList.add("is-hidden");
+
+    for (;;) {
+        let statusRes;
+        try {
+            statusRes = await fetch("/api/status");
+        } catch (_) {
+            await new Promise((r) => setTimeout(r, 1500));
+            continue;
+        }
+        if (!statusRes.ok) {
+            await new Promise((r) => setTimeout(r, 1500));
+            continue;
+        }
+        const s = await statusRes.json();
+        if (s.embeddings_status === "ready") {
+            hideOverlay();
+            return;
+        }
+        if (s.embeddings_status === "error") {
+            hideOverlay();
+            throw new Error(s.embeddings_error || "Embedding generation failed.");
+        }
+        if (s.embeddings_status !== "loading") {
+            hideOverlay();
+            return;
+        }
+        showOverlay();
+        if (textEl) {
+            const n = s.row_count != null ? Number(s.row_count).toLocaleString() : "?";
+            textEl.textContent = `Generating embeddings for ${n} records…`;
+        }
+        if (hintEl) {
+            hintEl.textContent =
+                "The page is loaded; this step may take a few minutes on CPU.";
+        }
+        await new Promise((r) => setTimeout(r, 1200));
+    }
+}
+
 async function init() {
     await fetchAndRenderData();
     setupUI();
 }
 
 async function fetchAndRenderData() {
+    document.getElementById("embedding-overlay")?.classList.remove("embedding-overlay--error");
     // Show loading indicator
     document.getElementById("graph-container").classList.add("loading");
     document.getElementById("viz").style.opacity = "0.5";
 
     try {
+        await ensureEmbeddingsReady();
+
         const response = await fetch(`/api/clusters?threshold=${currentThreshold}`);
+        if (!response.ok) {
+            const errBody = await response.json().catch(() => ({}));
+            throw new Error(errBody.detail || `HTTP ${response.status}`);
+        }
         globalData = await response.json();
 
         // Clear existing graph elements if any
@@ -51,12 +104,26 @@ async function fetchAndRenderData() {
         drawGraph();
     } catch (err) {
         console.error("Failed to fetch clustering data from API.", err);
-        document.getElementById("graph-container").innerHTML = `
+        const overlay = document.getElementById("embedding-overlay");
+        const textEl = document.getElementById("embedding-overlay-text");
+        const hintEl = overlay?.querySelector(".embedding-overlay-hint");
+        if (overlay && textEl) {
+            overlay.classList.remove("is-hidden");
+            overlay.classList.add("embedding-overlay--error");
+            textEl.textContent = err.message || String(err);
+            if (hintEl) {
+                hintEl.textContent =
+                    "Check that the server is running (e.g. python server.py) and refresh the page.";
+            }
+        } else {
+            document.getElementById("graph-container").innerHTML = `
             <div style="padding: 40px; text-align: center; color: #ef4444;">
                 <h2>Error loading data</h2>
-                <p>Make sure the backend server is running: <code>uvicorn server:app --port 8001</code> and visit <a href="http://localhost:8001" style="color:#3b82f6;">localhost:8001</a></p>
+                <p>${(err.message || String(err)).replace(/</g, "&lt;")}</p>
+                <p style="margin-top:1rem;">Make sure the backend server is running.</p>
             </div>
         `;
+        }
     } finally {
         document.getElementById("graph-container").classList.remove("loading");
         document.getElementById("viz").style.opacity = "1";

@@ -104,6 +104,12 @@
 
         <!-- Main Graph Area -->
         <main id="graph-container">
+            <div id="embedding-overlay" class="embedding-overlay is-hidden" aria-live="polite">
+                <div class="embedding-overlay-inner">
+                    <p id="embedding-overlay-text">Generating embeddings…</p>
+                    <p class="embedding-overlay-hint">The page is loaded; this step may take a few minutes on CPU.</p>
+                </div>
+            </div>
             <svg id="viz"></svg>
             <div class="tooltip" id="node-tooltip"></div>
         </main>
